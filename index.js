@@ -26,6 +26,7 @@ app.get('/', (req, res) => {
 
 app.post('/save', (req, res) => {
   const { body } = req;
+  console.log(body);
   res.json(body);
 })
 
