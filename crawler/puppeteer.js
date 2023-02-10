@@ -13,7 +13,7 @@ const crawler = async (link) => {
   const domain = chooseDomain(link);
 
   switch(domain) {
-    case domains.instagram:
+    case domains.ig:
       await ig(browser, link);
       break;
     default:
