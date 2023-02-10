@@ -7,10 +7,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-app.get('/', (req, res) => {
-  res.send('Root URL');
-});
-
 app.post('/save', async (req, res) => {
   const { body: { url } } = req;
   try {
