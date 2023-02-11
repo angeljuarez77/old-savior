@@ -5,7 +5,6 @@ const { domains } = require('./utils/domains');
 const { chooseDomain } = require('./utils/chooseDomain');
 
 const crawler = async (link) => {
-  // const browser = await puppeteer.launch({ headless: false });
   const browser = await puppeteer.launch();
 
   const domain = chooseDomain(link);
