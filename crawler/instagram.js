@@ -1,14 +1,16 @@
 const axios = require('axios');
+const { createFilename } = require('./utils/createFilename');
 const { timeConverter } = require('./utils/timeConverter');
 const { writeToFile } = require('./utils/writeToFile');
 
-let imagesSrc = null;
+let sources = null;
 let usernameString = null;
 let timestampString = null;
+let isVideo = false;
 
 const ig = async (browser, link) => {
   await initiateImageCrawl(browser, link);
-  await Promise.all(imagesSrc.map(async (url, i) => {
+  await Promise.all(sources.map(async (url, i) => {
     await downloadImage(browser, url, i);
   }));
 }
@@ -27,36 +29,80 @@ const initiateImageCrawl = async (browser, link) => {
 }
 
 const gatherImageLinks = async (interceptedRequest) => {
+  const sourceType = {
+    video: 'GraphVideo',
+    multipleImages: 'GraphSidecar',
+    singleImage: 'GraphImage'
+  }
+
   try {
     if (interceptedRequest.isInterceptResolutionHandled()) return;
-    // match GraphQL endpoint that has image sources
+    // match GraphQL endpoint that has file sources
     const instagramGraphQLEndpoint = /https:\/\/www.instagram.com\/graphql\/query\/\?query_hash=b3055c01b4b222b8a47dc12b090e4e64.*/gm
     const url = interceptedRequest.url();
-    // if domain matches make request to the endpoint - will return needed info to get images src
     if(url.match(instagramGraphQLEndpoint)) {
-      const req = await axios.get(url); // an intermediate point. GraphQL endpoint will give us cdn link
+      const req = await axios.get(url);
       const { data: { data: { shortcode_media } } } = req;
-      // metadata
-      const { taken_at_timestamp, owner: { username } } = shortcode_media;
-      usernameString = username;
-      timestampString = timeConverter(taken_at_timestamp);
-      // check if link has 1 or more images
-      const isSingleImage = shortcode_media.edge_sidecar_to_children === undefined;
-      if(isSingleImage) {
-        imagesSrc = [shortcode_media.display_resources[2].src]; // grab single link
-      } else {
-        // loop through links/slideshows to gather images src
-        const { edge_sidecar_to_children: { edges } } = shortcode_media;
-        imagesSrc = edges.map(item => {
-          return item.node.display_resources[2].src;
-        });
+      const { __typename } = shortcode_media;
+      gatherMetadata(shortcode_media);
+      switch(__typename) {
+        case sourceType.singleImage:
+          getSingleImageSource(shortcode_media);
+          break;
+        case sourceType.multipleImages:
+          getMultipleImageSources(shortcode_media);
+          break;
+        case sourceType.video:
+          getVideoSource(shortcode_media);
+          break;
+        default:
+          throw new Error('Unknown IG source type');
       }
       interceptedRequest.continue();
     } else {
       interceptedRequest.continue();
     }
   } catch(e) {
-    console.error(e.messsage);
+    console.trace();
+    console.error(e.message);
+  }
+}
+
+const gatherMetadata = (shortcode_media) => {
+  const { taken_at_timestamp, owner: { username } } = shortcode_media;
+  usernameString = username;
+  timestampString = timeConverter(taken_at_timestamp);
+}
+
+const getSingleImageSource = (shortcode_media) => {
+  try {
+    sources = [shortcode_media.display_resources[2].src];
+  } catch(e) {
+    console.trace();
+    console.error(e.message);
+  }
+}
+
+const getMultipleImageSources = (shortcode_media) => {
+  try {
+    const edges  = shortcode_media.edge_sidecar_to_children.edges;
+    sources = edges.map(item => {
+      return item.node.display_resources[2].src;
+    }); 
+  } catch(e) {
+    console.trace();
+    console.error(e.message);
+  }
+}
+
+const getVideoSource = (shortcode_media) => {
+  isVideo = true;
+  try {
+    const { video_url } = shortcode_media;
+    sources = [video_url];
+  } catch(e) {
+    console.trace();
+    console.error(e.message);
   }
 }
 
@@ -64,12 +110,29 @@ const downloadImage = async (browser, src, idx = 0) => {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1728, height: 1117 });
-
     page.on('response', async (interceptedResponse) => {
-      const faviconUrl = /favicon\.ico/
-      if(!interceptedResponse.url().match(faviconUrl)) {
-        const buffer = await interceptedResponse.buffer();
-        writeToFile(buffer, `instagram_${usernameString || 'unknown'}_${timestampString || 0}_picture_${idx + 1}`);
+      try {
+        const jpgUrl = /\.jpg/
+        const videoUrl = /\.mp4/
+        if(interceptedResponse.url().match(videoUrl)) {
+          const buffer = await interceptedResponse.buffer();
+          writeToFile(
+            buffer,
+            createFilename(usernameString, timestampString, idx, isVideo),
+            'mp4'
+          )
+        }
+        if(interceptedResponse.url().match(jpgUrl)) {
+          const buffer = await interceptedResponse.buffer();
+          writeToFile(
+            buffer,
+            createFilename(usernameString, timestampString, idx, isVideo),
+            'jpg'
+          );
+        }
+      } catch(e) {
+        console.trace();
+        console.error(e.message);
       }
     });
 
