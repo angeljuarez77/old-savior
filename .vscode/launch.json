@@ -16,7 +16,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/index.js"
+      "program": "${workspaceFolder}/server.js"
     },
     {
       "type": "node",
@@ -30,7 +30,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/index.js"
+      "program": "${workspaceFolder}/server.js"
     }
   ]
 }
